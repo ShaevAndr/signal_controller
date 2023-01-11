@@ -89,8 +89,6 @@ app.post("/new_message", async (req, res)=>{
         const searchingUser = await DB.get_account_by_subdomain(subdomain)
         const isSubscribe = searchingUser.finishUsingDate - Date.now();
         if (isSubscribe<0) {
-        console.log("не оплачено")
-
             return res.sendStatus(200)
         }
         const api = new Api(subdomain)
@@ -112,7 +110,6 @@ app.post("/new_message", async (req, res)=>{
 
         res.sendStatus(200)
     } catch {
-        console.log("new message error")
         // logger.error(`Новое сообщение не обработанно. Talk_id: ${talk_id}`)
         res.sendStatus(200)
     }
@@ -248,16 +245,9 @@ app.get("/notification", (req, res)=>{
 })
 
 app.get("/test_db", async (req,res)=>{
-    try{
-    await DB.add_test_message({test:"test"}).then(data=>{console.log(data, "            1")})
-    await DB.add_test_message({test:"test1"}).then(data=>{console.log(data, "            2")})
-    await DB.add_test_message({test:"test2"}).then(data=>{console.log(data, "            3")})
-    return res.status(200).json({status:"ok"})
-    } catch (error){
-        console.log(error)
+    
         return res.status(200).json({status:"error"})}
-    }
-)
+    )
    
 app.listen(2000, () => console.log("app is starting"));        
 
