@@ -1,3 +1,9 @@
-/node_modules
+/node_modules/
 /authclients/*
 test.js
+templates/
+views/
+exit
+index.html
+objects.js
+logs/

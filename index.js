@@ -15,33 +15,15 @@ app.use(cors({ origin: "*"}));
 app.use(express.urlencoded({ extended: true }));
 data_processing.init()
 
-class Notice {
-    constructor (res, data){
-        this.emitter = new EventEmitter()
-        this.res = res;
-        this.subdomain = data.subdomain
-        this.user = data.id
-        this.res.setHeader('Content-Type', 'text/event-stream');
-        this.res.setHeader('Cache-Control', 'no-cache');
-        this.res.setHeader('Connection', 'keep-alive');
-        this.res.setHeader("Content-Encoding", "identity");
-        this.res.setHeader("Access-Control-Allow-Origin", "*");
-        this.res.setHeader("Access-Control-Allow-Methods", "*");
-        setInterval(()=>{this.res.write('data: {"ping": "pong"} \n\n')}, 30000)
-        this.emitter.on("notification", ()=>{
-            this.res.write("event: notification\n")
-            this.res.write("data:from server \n\n")})
-    }
-
-    send_to_client () {
-        this.emitter.emit("notification")
-    }
-
-    
-}
 
 app.post("/informer", (req, res)=>{
-    console.log(req.body)
+    fetch("https://vds2151841.my-ihor.ru/informer", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(req.body)
+                })
     res.sendStatus(200)
 })
 // удаляет действие
@@ -58,7 +40,9 @@ app.patch('/data_change', (req, res) => {
     DB.change_action(subdomain, changes)
     .then(()=>{
         DB.get_action_by_id(subdomain, changes._id)
-        .then(data=>res.json(data))
+        .then(data=>{
+            res.json(data)})
+
     })
     .catch(()=>res.sendStatus(400))
     
@@ -83,14 +67,17 @@ app.post("/get_actions", (req, res) => {
 }) 
 
 app.post("/new_message", async (req, res)=>{
+    console.log("new_message")
+
     try{        
         const {chat_id, talk_id, created_at, contact_id, updated_at} = req.body.message.add[0],
         {subdomain, id} = req.body.account;
+
         const searchingUser = await DB.get_account_by_subdomain(subdomain)
         const isSubscribe = searchingUser.finishUsingDate - Date.now();
-        if (isSubscribe<0) {
-            return res.sendStatus(200)
-        }
+        // if (isSubscribe<0) {
+        //         return res.sendStatus(200)
+        // }
         const api = new Api(subdomain)
         let message = {chat_id,
             talk_id,
@@ -101,20 +88,26 @@ app.post("/new_message", async (req, res)=>{
         const talk = await api.getTalk(talk_id)
         const lead_id = talk._embedded["leads"][0]["id"]
         const lead = await api.getDeal(lead_id)
+        if (lead._embedded.companies.length) {
+            message.company = lead._embedded.companies[0].id
+        }
         message.lead_id = lead_id
         message.updated_at = talk.updated_at
         message.is_read = talk.is_read
         message.responsible_id = lead.responsible_user_id
         message.group_id = lead.group_id
         await data_processing.message_processing(message)
-
         res.sendStatus(200)
     } catch {
+        (err) => {
+            console.log(err)
+            res.sendStatus(200)
+        }
         // logger.error(`Новое сообщение не обработанно. Talk_id: ${talk_id}`)
-        res.sendStatus(200)
     }
 })
 app.post("/change_talk", async (req, res)=>{    
+    console.log("change_talk")
     if (req.body.talk.update[0].is_read === "1"){
         const talk_id = req.body.talk.update[0].talk_id
         const subdomain = req.body.account.subdomain
@@ -135,7 +128,6 @@ app.get('/login', async (req, res) => {
         .catch((err) => logger.debug("Ошибка авторизации при установке виджета ", subDomain, err.data));
         
         const subdomain_in_base = await DB.get_account_by_subdomain(subDomain)
-        console.log(subdomain_in_base)
         if (!subdomain_in_base) {
             const account = await api.getAccountData();
             const accountId = account.id;
@@ -194,7 +186,6 @@ app.get('/delete', async (req, res) => {
             .catch((err) => logger.debug("Произошла ошибка обновления данных в БД ", err));
         logger.debug("Виджет был удалён из аккаунта");
     } catch(e) {
-        console.log(e);
         res.status(400).json({ message: "Login error.", body: e })
     }
     // await makeRedirect(`${config.WIDGET_CONTROLLER_URL}/del`, { ...req.query })
@@ -238,16 +229,40 @@ app.get('/status', async (req, res) => {
 
 
 app.get("/notification", (req, res)=>{
-    const data = req.query
-    const emiter = new Notice(res, data)
-    data_processing.add_client(emiter)
+    const headers = {
+        'Content-Type': 'text/event-stream',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache'
+      };
+    res.writeHead(200, headers);
+    
+    const data = `data: data\n\n`;
+    
+      res.write(data);
+
+      setInterval(()=>{res.write(data);}, 30000)
+    
+      const client = {
+        id:req.query.id , 
+        res:res
+      };
+      data_processing.add_client(client)
+    
+    
+      req.on('close', () => {
+        return;
+      });
+
+    // const data = req.query
+    // const emiter = new Notice(res, data)
+    // data_processing.add_client(emiter)
 
 })
 
 app.get("/test_db", async (req,res)=>{
     
-        return res.status(200).json({status:"error"})}
+        return res.status(200).json({status:"test"})}
     )
    
-app.listen(2000, () => console.log("app is starting"));        
+app.listen(2023, () => console.log("app is starting"));        
 

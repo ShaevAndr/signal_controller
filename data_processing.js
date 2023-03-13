@@ -1,5 +1,7 @@
 const DB = require("./db").DB
 const Api = require("./api")
+const moment = require('moment-timezone');
+const schedule_processiung = require("./schedule_processing")
 
 
 let first_message = null
@@ -7,20 +9,32 @@ let timer = null
 let users = {}
 
 
-const convert_task_date = (date_string) => {
+// return number in seconds
+const get_offset_tz = (tz) => {
+
+    const offset = parseInt(moment().tz(tz).format('Z'))
+
+    return offset * 3600
+
+}
+
+const convert_task_date = (date_string, tz) => {
+    // in seconds
     let date = new Date()
+    // const offset = get_offset_tz(tz)
+    const offset = 3 *3600
     date.setHours(0, 0, 0)
     switch (date_string) {
         case "inMoment":
-            return parseInt(Date.now()/1000)
+            return (parseInt(Date.now()/1000))
         case "today":
-            return parseInt(date/1000) + 24*3600
+            return (parseInt(date/1000) + 24*3600) - offset
         case "afterDay":
-            return parseInt(date/1000) + 2*24*3600
+            return (parseInt(date/1000) + 2*24*3600) - offset
         case "3DayLater":
-            return parseInt(date/1000) + 3*24*3600
+            return (parseInt(date/1000) + 3*24*3600) - offset
         case "forWeek":
-            return parseInt(date/1000) + 7*24*3600
+            return (parseInt(date/1000) + 7*24*3600) - offset
     }
 }
 
@@ -30,10 +44,8 @@ const set_message_timer = (message) => {
     if (message.action_time > Date.now()+1000) {
         delay = message.action_time - Date.now()
     }
-    console.log("delay:    ", delay)
-    
     timer = setTimeout(realize_actions, delay, message)
-    console.log("выход из установки таймера")
+    console.log(delay)
 }
 
 const init = async () => {
@@ -54,7 +66,15 @@ const init = async () => {
 // Добавляет сообщение в базу. И если время срабатывания меньше, чем в текушем сообщении (first_action)
 // сбрасывает таймер и заного проходит инициализацию
 const add_message_to_db = async (actions, message) => {
-    message.action_time = (Number(message.updated_at) + Number(actions.delay_time) * 60) * 1000
+    const is_work_time = schedule_processiung.is_work_time(actions.schedule, message.created_at, actions.timezone)
+    let second_to_work = 1
+    if (!is_work_time) {
+        second_to_work = schedule_processiung.time_to_start_work(actions.schedule, message.created_at, actions.timezone)
+    }
+    if (!second_to_work) {
+        return Promise.resolve()
+    }
+    message.action_time = (Number(message.updated_at) + Number(actions.delay_time) * 60 + second_to_work) * 1000
     message.actions = actions
     message._id = String(Date.now()) + String(Math.floor(Math.random() * 100))
     const result = await DB.add_message(message)
@@ -96,7 +116,6 @@ const message_processing = async (message) => {
     const user_actions = await DB.find_actions(message.subdomain, {"manager.id":String(message.responsible_id)}) || []
     const group_actions = await DB.find_actions(message.subdomain, {"manager.id":`group_${message.group_id}`}) || []
     const actions = [...user_actions, ...group_actions]
-
     if (!actions.length) {
         return
     }
@@ -115,13 +134,17 @@ const realize_actions = async (message) =>{
     const api = new Api(message.subdomain)
 
     if (message.actions.task){
+        let responsible_for_leads =  Number(message.actions.task.responsible.id)
+        if (responsible_for_leads === -1) {
+            responsible_for_leads = message.responsible_id
+        }
         await api.createTasks([{
             "entity_id":message.lead_id,
             "entity_type": "leads",
             "task_type_id": message.actions.task.type.id,
-            "responsible_user_id": Number(message.actions.task.responsible.id),
+            "responsible_user_id": responsible_for_leads,
             "text": message.actions.task.text,
-            "complete_till":convert_task_date(message.actions.task.date)
+            "complete_till":convert_task_date(message.actions.task.date, message.actions.timezone)
         }]).catch(err=>{console.log(err.response.data)})
         
     }
@@ -132,19 +155,52 @@ const realize_actions = async (message) =>{
         }).catch(err=>{console.log(err.response.data)})
     }
     if (message.actions.tags){
-        const tags = message.actions.tags.map(tag=>{return{"id":tag.id}})
+        let tags = message.actions.tags.map(tag=>{return{"name":tag.name}})
+        const lead = await api.getDeal(message.lead_id)
+        let lead_tags, company_tags, contact_tags
+        
+        
+        if (lead._embedded.tags.length) {
+            lead_tags = lead._embedded.tags.map(tag=>{return {name: tag.name}})
+        }
         await api.updateDeals({
             "id":message.lead_id,
             "_embedded": {
-                "tags": tags
+                "tags": [...tags, ...lead_tags || []]
             }
         }).catch(err=>{console.log(err.response.data)})
+
+        if(message.actions.tag_on_contact) {
+            const contact = await api.getContact(Number(message.contact_id))
+            if (contact._embedded.tags.length) {
+                contact_tags = contact._embedded.tags.map(tag=>{return {name: tag.name}})
+            }
+            await api.updateContacts({
+                "id":Number(message.contact_id),
+                "_embedded": {
+                    "tags": [...contact_tags || [], ...tags]
+                }
+            }).catch(err=>{console.log(err.response.data)})
+        }
+        if(message.actions.tag_on_company && message.company) {
+            const company = await api.getCompany(Number(message.company))
+            if (company._embedded.tags.length) {
+                company_tags = company._embedded.tags.map(tag=>{return {name: tag.name}})
+            }
+            await api.updateCompany({
+                "id":Number(message.company),
+                "_embedded": {
+                    "tags": [...company_tags || [], ...tags]
+                }
+            }).catch(err=>{console.log(err.response.data)})
+        }
     }
     if (message.actions.notice){
-        console.log("realiza_actions отправка в телеграмм")
-        if (users[message.actions.manager.id]){
-            
-            users[message.actions.manager.id].send_to_client()
+
+        if (users[message.responsible_id]){
+            users[message.responsible_id].write("event: notification\n")
+            users[message.responsible_id].write(`data:${message.actions.notice} \n\n`)
+            users[message.responsible_id].end()
         }
     }
     await DB.delete_message({"_id":message._id})
@@ -168,8 +224,8 @@ const delete_talk = (talk_id, subdomain) =>{
 
 }
 
-const add_client = (emiter) => {
-    users[emiter.user] = emiter
+const add_client = (client) => {
+    users[client.id] = client.res
 }
 
 module.exports = {

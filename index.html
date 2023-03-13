@@ -7,12 +7,54 @@
     <title>Document</title>
 </head>
 <body>
-    <H2 id="test">TEST</H2>
-    <script>
-        const el = document.getElementById("test")
-        const es = new EventSource("http://localhost:2000/notification")
-        es.onmessage = (event, message)=>{el.innerText = JSON.stringify(message)}
+    <div class="reon-msgctrl__select_user_wraper">
+        <div class="reon-msgctrl__user_name">
+            Name
+        </div>
+        <div class="reon-msgctrl__user_select_block">
+            <input type="text" class="reon-msgctrl__find_user">
+            <div class="reon-msgctrl__users_list">
 
-    </script>
+            </div>
+        </div>
+
+    </div>    
 </body>
 </html>
+
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=PT+Sans&display=swap');
+body {
+    font-family: "PT Sans", sans-serif;
+    font-size: 15px;
+    font-style: normal; 
+    font-weight: normal;
+}
+
+    /* @font-face {
+
+    font-family: "PT Sant" , sans-serif;
+    src: "";
+    font-size: 15px;
+    font-style: normal; 
+    font-weight: normal;
+
+} */
+
+.reon-msgctrl__select_user_wraper{
+    position: relative;
+}
+
+.reon-msgctrl__user_name {
+    position: absolute;
+}
+
+.reon-msgctrl__user_select_block input {
+    outline: none;
+    border-bottom: 1px blue solid;
+}
+
+
+
+
+</style>
