@@ -347,6 +347,46 @@ function Api(subdomain, authCode="") {
         })
         .then((res) => res.data);
     });
+
+    this.getEvents = authChecker(({ page = 1, limit = LIMIT, filters }) => {
+      const url = `${ROOT_PATH}/api/v4/events?${querystring.stringify({
+        page,
+        limit,
+        ...filters,
+      })}`;
+  
+      return axios
+        .get(url, {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+          },
+        })
+        .then((res) => {
+          return res.data ? res.data._embedded.leads : [];
+        });
+    });
+    
+    this.getNotes = authChecker((call, { page = 1, limit = LIMIT, filters }) => {
+      const url = `${ROOT_PATH}/api/v4/${call.entity_type}s/${call.entity_id}/notes?${querystring.stringify({
+        page,
+        limit,
+        ...filters,
+      })}`;
+  
+      return axios
+        .get(url, {
+          headers: {
+            Authorization: `Bearer ${access_token}`,
+          },
+        })
+        .then((res) => {
+          return res.data ? res.data._embedded.leads : [];
+        });
+    });
+
+
+ 
+  
   }
   
 module.exports = Api;
