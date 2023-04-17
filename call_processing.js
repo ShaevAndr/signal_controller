@@ -1,5 +1,5 @@
 const Api = require("./api")
-const {call_processing} = require("./data_processing")
+const {call_processing} = require("./data_processing_old")
 
 const check_answer = async (call, subdomain) => {
     const api = new Api(subdomain)
