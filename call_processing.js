@@ -1,8 +1,13 @@
 const Api = require("./api")
+const {call_processing} = require("./data_processing")
 
 const check_answer = async (call, subdomain) => {
     const api = new Api(subdomain)
-    const notes = await fetch(`https://keypro.amocrm.ru/api/v4/${call.entity_type}s/${call.entity_id}/notes?filter[note_type]=call_out&filter[updated_at][from]=${call.created_at}`).then(data=>data.json())
+    const notes = await api.getNotes(call, {
+        filters:{
+            "filter[note_type]": "call_out",
+            "filter[updated_at][from]": call.created_at
+        }})
     return notes._embedded.notes.length ?  true : false
 }
 
@@ -22,7 +27,6 @@ const check_call = async (call, subdomain) => {
                 if (note.params.call_status === 4 || note.params.call_status === 5) {return}
                 const have_answer = await check_answer(call, subdomain)
                 !have_answer && call_processing(call, subdomain)
-                return
             }
         }
     } catch (error) {
@@ -49,11 +53,15 @@ const parse_calls = async (subdomain) => {
         return
     }
     for (const call of incoming_calls) {
-        check_call(call, subdomain)
+        await check_call(call, subdomain)
     }
     
 }
 
 function init_requests(subdomain){
     intervals.subdomain = setInterval(parse_calls, 30000, subdomain)
+}
+
+module.exports = {
+    init_requests
 }

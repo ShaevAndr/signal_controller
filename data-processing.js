@@ -4,18 +4,49 @@ const moment = require('moment-timezone');
 const schedule_processiung = require("./schedule_processing")
 
 
-let first_message = null
+let first_call = null
 let timer = null
 let users = {}
 
+const add_call_to_db = async (actions, call) => {
+    const is_work_time = schedule_processiung.is_work_time(actions.schedule, call.created_at, actions.timezone)
+    let second_to_work = 1
+    if (!is_work_time) {
+        second_to_work = schedule_processiung.time_to_start_work(actions.schedule, call.created_at, actions.timezone)
+    }
+    if (!second_to_work) {
+        return Promise.resolve()
+    }
+    call.action_time = (Number(call.created_at) + Number(actions.delay_time) * 60 + second_to_work) * 1000
+    call.actions = actions
+    call._id = String(Date.now()) + String(Math.floor(Math.random() * 100))
+    const result = await DB.add_message(call)
+    .then((data)=>{
+        if (!first_call || call.action_time < first_call.action_time) {
+            if (timer) {
+                clearTimeout(timer)
+                first_call = call
+            }
+            set_call_timer(call)
+        }
+        return data
 
-// return number in seconds
-const get_offset_tz = (tz) => {
+    })    
+    return result 
+}
 
-    const offset = parseInt(moment().tz(tz).format('Z'))
-
-    return offset * 3600
-
+const call_processing = async (call, subdomain) => {
+    const user_actions = await DB.find_actions(subdomain, {"manager.id":String(call.created_by)}) || []
+    const group_actions = await DB.find_actions(subdomain, {"manager.id":`group_${call.group_id}`}) || []
+    const actions = [...user_actions, ...group_actions]
+    call.subdomain = subdomain
+    if (!actions.length) {
+        return
+    }
+    for (action of actions) {
+        const result = await add_call_to_db(action, call)
+    }
+    return
 }
 
 const convert_task_date = (date_string, tz) => {
@@ -38,93 +69,31 @@ const convert_task_date = (date_string, tz) => {
     }
 }
 
-//  Инициализация. Получаем сообзщение с самым ранним временем действия и запускаем таймер на реализацию.
-const set_message_timer = (message) => {
+const set_call_timer = (call) => {
     let delay = 0
-    if (message.action_time > Date.now()+1000) {
-        delay = message.action_time - Date.now()
+    if (call.action_time > Date.now()+1000) {
+        delay = call.action_time - Date.now()
     }
-    timer = setTimeout(realize_actions, delay, message)
+    timer = setTimeout(realize_actions, delay, call)
     console.log(delay)
 }
 
 const init = async () => {
-    let early_message = null
+    let early_call = null
     try{
-        early_message = await DB.get_early_message()
+        early_call = await DB.get_early_call()
     } catch {
         return
     }
-    if (!early_message) {
-        first_message = null
+    if (!early_call) {
+        first_call = null
         return
     }
-    first_message = early_message
-    set_message_timer(early_message)    
+    first_call = early_call
+    set_call_timer(early_call)    
 }
 
-// Добавляет сообщение в базу. И если время срабатывания меньше, чем в текушем сообщении (first_action)
-// сбрасывает таймер и заного проходит инициализацию
-const add_message_to_db = async (actions, message) => {
-    const is_work_time = schedule_processiung.is_work_time(actions.schedule, message.created_at, actions.timezone)
-    let second_to_work = 1
-    if (!is_work_time) {
-        second_to_work = schedule_processiung.time_to_start_work(actions.schedule, message.created_at, actions.timezone)
-    }
-    if (!second_to_work) {
-        return Promise.resolve()
-    }
-    message.action_time = (Number(message.updated_at) + Number(actions.delay_time) * 60 + second_to_work) * 1000
-    message.actions = actions
-    message._id = String(Date.now()) + String(Math.floor(Math.random() * 100))
-    const result = await DB.add_message(message)
-    .then((data)=>{
-        if (!first_message || message.action_time < first_message.action_time) {
-            if (timer) {
-                clearTimeout(timer)
-                first_message = message
-            }
-            set_message_timer(message)
-        }
-        return data
-
-    })    
-    return result 
-}
-
-
-// Проверяем нужно ли обновлять сообщение (есть ли ответ или более ранние сообщения).
-const need_update = async (talk_id) => {
-    const messages = await DB.find_message({"talk_id":`${talk_id}`})
-    return messages.length ? false : true
-}
-
-// проверяем есть ли ответ на сообщение
-const message_have_answer = async (talk_id, subdomain) => {
-    const api = new Api(subdomain)
-    const talk = await api.getTalk(talk_id).then(data=>data)
-    return talk.is_read
-}
-
-const message_processing = async (message) => {
-    
-// Проверяем есть ли более ранние сообщения и есть ли ответ на последние сообщение
-    const need_add_message = await need_update(message.talk_id, message.subdomain)
-    if (!need_add_message) {
-        return
-    }
-    const user_actions = await DB.find_actions(message.subdomain, {"manager.id":String(message.responsible_id)}) || []
-    const group_actions = await DB.find_actions(message.subdomain, {"manager.id":`group_${message.group_id}`}) || []
-    const actions = [...user_actions, ...group_actions]
-    if (!actions.length) {
-        return
-    }
-    for (action of actions) {
-        const result = await add_message_to_db(action, message)
-    }
-}
-
-const realize_actions = async (message) =>{
+const realize_actions = async (call) =>{
     const have_answer = await message_have_answer(message.talk_id, message.subdomain)
     if (have_answer) {
         await delete_talk(message.talk_id, message.subdomain)
@@ -205,32 +174,4 @@ const realize_actions = async (message) =>{
     }
     await DB.delete_message({"_id":message._id})
     init()
-}
-
-// Удаляет сообщение в чате, если оно прочитанно
-const delete_talk = (talk_id, subdomain) =>{
-    DB.delete_message({"talk_id":String(talk_id), "subdomain":subdomain})
-    .then(()=>{
-        if (!first_message) {
-            return
-        }
-        if (first_message.talk_id === talk_id) {
-            clearTimeout(timer)
-            first_message = null
-            init()
-        }
-    })
-    .catch(err => {console.log("data_proccesing error delete_talk", err)})
-
-}
-
-const add_client = (client) => {
-    users[client.id] = client.res
-}
-
-module.exports = {
-    message_processing,
-    init, 
-    delete_talk,
-    add_client
 }
