@@ -14,7 +14,7 @@ class DB {
     static async add_action (table, data) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection(table)
             const result = await collection.insertOne(data)
             return result
@@ -28,7 +28,7 @@ class DB {
     static async find_actions (table, data) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection(table)
             const result = await collection.find(data)
             const actions = await result.toArray();
@@ -43,7 +43,7 @@ class DB {
     static async delete_action (table, id) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection(table)
             const result = await collection.deleteOne({_id:id});
             return result
@@ -56,7 +56,7 @@ class DB {
     static async change_action (table, data) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection(table)
             const result = await collection.replaceOne({_id:data._id}, data);
             return result
@@ -69,7 +69,7 @@ class DB {
     static async get_all_actions (table) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection(table);
             const result = collection.find();
             const all_actions = await result.toArray();
@@ -83,7 +83,7 @@ class DB {
     static async get_action_by_id (table, id) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection(table);
             const result = await collection.findOne({_id:id});
             return result;
@@ -96,7 +96,7 @@ class DB {
     static async add_account (data) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection("accounts")
             const result = await collection.insertOne(data)
             return result
@@ -109,7 +109,7 @@ class DB {
     static async get_account_by_subdomain (subDomain) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection("accounts")
             const result = await collection.findOne({subDomain:subDomain})
             return result
@@ -123,7 +123,7 @@ class DB {
     static async find_account (data) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection("accounts")
             const result = await collection.findOne(data)
             return result
@@ -137,7 +137,7 @@ class DB {
     static async update_account_by_subdomain (subDomain, new_data) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection("accounts")
             const result = await collection.updateOne({subDomain:subDomain}, {$set:new_data})
             return result
@@ -152,7 +152,7 @@ class DB {
     static async add_message (data) {
         try{
             await mongoClient.connect();
-            const db = await mongoClient.db("income_message_control");
+            const db = await mongoClient.db("income_calls_control");
             const collection = await db.collection("messages")
             const result = await collection.insertOne(data)
             return result
@@ -166,7 +166,7 @@ class DB {
     static async add_test_message (data) {
         try{
             await mongoClient.connect();
-            const db = await mongoClient.db("income_message_control");
+            const db = await mongoClient.db("income_calls_control");
             const collection = await db.collection("test_messages")
             const result = await collection.insertOne(data)
             return result
@@ -181,7 +181,7 @@ class DB {
     static async find_message (data) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection("messages");
             const result = collection.find(data);
             const all_messages = await result.toArray();
@@ -193,10 +193,10 @@ class DB {
         }
     }
     
-    static async get_early_message() {
+    static async get_early_call() {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
+            const db = mongoClient.db("income_calls_control");
             const collection = await db.collection("messages");
             const result = collection.find().sort({created_at:1}).limit(1);
             const early_message = await result.toArray();
@@ -208,11 +208,11 @@ class DB {
         }
     }
 
-    static async delete_message (data) {
+    static async delete_calls (data) {
         try{
             await mongoClient.connect();
-            const db = mongoClient.db("income_message_control");
-            const collection = await db.collection("messages")
+            const db = mongoClient.db("income_calls_control");
+            const collection = await db.collection("calls")
             await collection.deleteMany(data);
             return 
         }catch

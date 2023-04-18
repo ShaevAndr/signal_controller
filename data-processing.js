@@ -2,11 +2,27 @@ const DB = require("./db").DB
 const Api = require("./api")
 const moment = require('moment-timezone');
 const schedule_processiung = require("./schedule_processing")
+const call_processing = require("./call_processing")
 
 
 let first_call = null
 let timer = null
 let users = {}
+
+const delete_call = (call) => {
+    DB.delete_calls({"id":String(call.id), "subdomain":call.subdomain})
+    .then(()=>{
+        if (!first_call) {
+            return
+        }
+        if (first_call.id === call.id) {
+            clearTimeout(timer)
+            first_call = null
+            init()
+        }
+    })
+    .catch(err => {console.log("data_proccesing error delete_talk", err)})
+}
 
 const add_call_to_db = async (actions, call) => {
     const is_work_time = schedule_processiung.is_work_time(actions.schedule, call.created_at, actions.timezone)
@@ -35,9 +51,9 @@ const add_call_to_db = async (actions, call) => {
     return result 
 }
 
-const call_processing = async (call, subdomain) => {
-    const user_actions = await DB.find_actions(subdomain, {"manager.id":String(call.created_by)}) || []
-    const group_actions = await DB.find_actions(subdomain, {"manager.id":`group_${call.group_id}`}) || []
+const call_processing = async (call) => {
+    const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.created_by)}) || []
+    const group_actions = await DB.find_actions(call.subdomain, {"manager.id":`group_${call.group_id}`}) || []
     const actions = [...user_actions, ...group_actions]
     call.subdomain = subdomain
     if (!actions.length) {
@@ -94,9 +110,9 @@ const init = async () => {
 }
 
 const realize_actions = async (call) =>{
-    const have_answer = await message_have_answer(message.talk_id, message.subdomain)
+    const have_answer = await call_processing.have_answer(call)
     if (have_answer) {
-        await delete_talk(message.talk_id, message.subdomain)
+        await delete_call(call)
         init()
         return
     }
@@ -174,4 +190,8 @@ const realize_actions = async (call) =>{
     }
     await DB.delete_message({"_id":message._id})
     init()
+}
+
+module.exports = {
+    call_processing
 }

@@ -1,8 +1,11 @@
 const Api = require("./api")
 const {call_processing} = require("./data_processing_old")
 
-const check_answer = async (call, subdomain) => {
-    const api = new Api(subdomain)
+// Переодичность запросов (сек)
+const DELAY = 30
+
+const check_answer = async (call) => {
+    const api = new Api(call.subdomain)
     const notes = await api.getNotes(call, {
         filters:{
             "filter[note_type]": "call_out",
@@ -16,6 +19,7 @@ let intervals = {}
 const check_call = async (call, subdomain) => {
     try{
         const api = new Api(subdomain)
+        call.subdomain = subdomain
         const notes = await api.getNotes(call, {
             filters:{
                 "filter[note_type]": "call_in",
@@ -25,8 +29,13 @@ const check_call = async (call, subdomain) => {
         for (let note of notes._embedded.notes) {
             if (note.created_at === call.created_at) {
                 if (note.params.call_status === 4 || note.params.call_status === 5) {return}
-                const have_answer = await check_answer(call, subdomain)
-                !have_answer && call_processing(call, subdomain)
+                const have_answer = await check_answer(call)
+                if (!have_answer) {
+                    const contact = await api.getContact(call.created_by)
+                    const group_id = contact.group_id
+                    call.group_id = group_id
+                    await call_processing(call)
+                }
             }
         }
     } catch (error) {
@@ -36,14 +45,13 @@ const check_call = async (call, subdomain) => {
 
 }
 
-const send_to_server = async () => {}
 
 const parse_calls = async (subdomain) => {
     const current_time = Math.round(Date.now()/1000)
     const api = new Api(subdomain)
     const events = await api.getEvents({filters:
         {'filter[type]' : "incoming_call",
-        "filter[created_at][from]" : current_time-30,
+        "filter[created_at][from]" : current_time-DELAY,
         "filter[created_at][to]" : current_time
     }}).then(data=> data.json())
 
@@ -63,5 +71,6 @@ function init_requests(subdomain){
 }
 
 module.exports = {
-    init_requests
+    init_requests,
+    check_answer
 }
