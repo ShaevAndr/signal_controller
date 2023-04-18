@@ -30,13 +30,22 @@ const add_call_to_db = async (actions, call) => {
     if (!is_work_time) {
         second_to_work = schedule_processiung.time_to_start_work(actions.schedule, call.created_at, actions.timezone)
     }
-    if (!second_to_work) {
-        return Promise.resolve()
-    }
+    // if (!second_to_work) {
+    //     return Promise.resolve()
+    // }
     call.action_time = (Number(call.created_at) + Number(actions.delay_time) * 60 + second_to_work) * 1000
     call.actions = actions
     call._id = String(Date.now()) + String(Math.floor(Math.random() * 100))
-    const result = await DB.add_message(call)
+    if (call.entity_type !== "lead") {return}
+    
+    const lead = await api.getDeal(call.entity_id)
+    if (lead._embedded.companies.length) {
+        call.company = lead._embedded.companies[0].id
+    }
+    call.responsible_id = lead.responsible_user_id
+    call.group_id = lead.group_id
+
+    const result = await DB.add_call(call)
     .then((data)=>{
         if (!first_call || call.action_time < first_call.action_time) {
             if (timer) {
@@ -116,32 +125,32 @@ const realize_actions = async (call) =>{
         init()
         return
     }
-    const api = new Api(message.subdomain)
+    const api = new Api(call.subdomain)
 
-    if (message.actions.task){
-        let responsible_for_leads =  Number(message.actions.task.responsible.id)
+    if (call.actions.task && call.entity_type==="lead"){
+        let responsible_for_leads =  Number(call.actions.task.responsible.id)
         if (responsible_for_leads === -1) {
-            responsible_for_leads = message.responsible_id
+            responsible_for_leads = call.responsible_id
         }
         await api.createTasks([{
-            "entity_id":message.lead_id,
+            "entity_id":call.entity_id,
             "entity_type": "leads",
-            "task_type_id": message.actions.task.type.id,
+            "task_type_id": call.actions.task.type.id,
             "responsible_user_id": responsible_for_leads,
-            "text": message.actions.task.text,
-            "complete_till":convert_task_date(message.actions.task.date, message.actions.timezone)
+            "text": call.actions.task.text,
+            "complete_till":convert_task_date(call.actions.task.date, call.actions.timezone)
         }]).catch(err=>{console.log(err.response.data)})
         
     }
-    if (message.actions.new_responsible){
+    if (call.actions.new_responsible && call.entity_type==="lead"){
         await api.updateDeals({
-            "id":message.lead_id,
-            "responsible_user_id": Number(message.actions.new_responsible.id)
+            "id":call.entity_id,
+            "responsible_user_id": Number(call.actions.new_responsible.id)
         }).catch(err=>{console.log(err.response.data)})
     }
-    if (message.actions.tags){
-        let tags = message.actions.tags.map(tag=>{return{"name":tag.name}})
-        const lead = await api.getDeal(message.lead_id)
+    if (call.actions.tags && call.entity_type==="lead"){
+        let tags = call.actions.tags.map(tag=>{return{"name":tag.name}})
+        const lead = await api.getDeal(call.entity_id)
         let lead_tags, company_tags, contact_tags
         
         
@@ -149,46 +158,51 @@ const realize_actions = async (call) =>{
             lead_tags = lead._embedded.tags.map(tag=>{return {name: tag.name}})
         }
         await api.updateDeals({
-            "id":message.lead_id,
+            "id":call.entity_id,
             "_embedded": {
                 "tags": [...tags, ...lead_tags || []]
             }
         }).catch(err=>{console.log(err.response.data)})
 
-        if(message.actions.tag_on_contact) {
-            const contact = await api.getContact(Number(message.contact_id))
+    // !!!!!!!!!!!!!!!!!!!!! контакт искать
+
+        if(call.actions.tag_on_contact) {
+            const contact = await api.getContact(Number(call.contact_id))
             if (contact._embedded.tags.length) {
                 contact_tags = contact._embedded.tags.map(tag=>{return {name: tag.name}})
             }
             await api.updateContacts({
-                "id":Number(message.contact_id),
+                "id":Number(call.contact_id),
                 "_embedded": {
                     "tags": [...contact_tags || [], ...tags]
                 }
             }).catch(err=>{console.log(err.response.data)})
         }
-        if(message.actions.tag_on_company && message.company) {
-            const company = await api.getCompany(Number(message.company))
+
+    // !!!!!!!!!!!!!!!!!!!!! компанию искать
+
+        if(call.actions.tag_on_company && call.company) {
+            const company = await api.getCompany(Number(call.company))
             if (company._embedded.tags.length) {
                 company_tags = company._embedded.tags.map(tag=>{return {name: tag.name}})
             }
             await api.updateCompany({
-                "id":Number(message.company),
+                "id":Number(call.company),
                 "_embedded": {
                     "tags": [...company_tags || [], ...tags]
                 }
             }).catch(err=>{console.log(err.response.data)})
         }
     }
-    if (message.actions.notice){
+    if (call.actions.notice){
 
-        if (users[message.responsible_id]){
-            users[message.responsible_id].write("event: notification\n")
-            users[message.responsible_id].write(`data:${message.actions.notice} \n\n`)
-            users[message.responsible_id].end()
+        if (users[call.responsible_id]){
+            users[call.responsible_id].write("event: notification\n")
+            users[call.responsible_id].write(`data:${call.actions.notice} \n\n`)
+            users[call.responsible_id].end()
         }
     }
-    await DB.delete_message({"_id":message._id})
+    await DB.delete_calls({"_id":call._id})
     init()
 }
 
