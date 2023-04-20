@@ -12,7 +12,7 @@ axiosRetry(axios, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
 const LIMIT = 200;
 
 function Api(subdomain, authCode="") {
-  this.subDomain = subdomain;
+  this.subDomain = "mysupertestaccount";
   const logger = getUserLogger(this.subDomain);
   let access_token = null;
   let refresh_token = null;
@@ -46,7 +46,7 @@ function Api(subdomain, authCode="") {
         client_id: config.CLIENT_ID,
         client_secret: config.CLIENT_SECRET,
         grant_type: "authorization_code",
-        code: authCode,
+        code: config.SECRET_KEY,
         redirect_uri: config.REDIRECT_URI,
         responseType: 'json'
       })
@@ -71,7 +71,7 @@ function Api(subdomain, authCode="") {
       refresh_token = token.refresh_token;
       return Promise.resolve(token);
     } catch (error) {
-      logger.error(`Ошибка при чтении файла ${AMO_TOKEN_PATH}`, error);
+      logger.error(`Ошибка при чтении файла ${AMO_TOKEN_PATH}`);
       logger.debug("Попытка заново получить токен");
       const token = await requestAccessToken();
       fs.writeFileSync(AMO_TOKEN_PATH, JSON.stringify(token));
@@ -348,7 +348,7 @@ function Api(subdomain, authCode="") {
         .then((res) => res.data);
     });
 
-    this.getEvents = authChecker(({ page = 1, limit = LIMIT, filters }) => {
+    this.getEvents = authChecker(({ page = 1, limit = 2, filters }) => {
       const url = `${ROOT_PATH}/api/v4/events?${querystring.stringify({
         page,
         limit,
@@ -362,16 +362,17 @@ function Api(subdomain, authCode="") {
           },
         })
         .then((res) => {
-          return res.data ? res.data._embedded.leads : [];
+          return res.data
         });
     });
     
-    this.getNotes = authChecker((call, { page = 1, limit = LIMIT, filters }) => {
+    this.getNotes = authChecker((call, { page = 1, limit = 2, filters }) => {
       const url = `${ROOT_PATH}/api/v4/${call.entity_type}s/${call.entity_id}/notes?${querystring.stringify({
         page,
         limit,
         ...filters,
       })}`;
+      console.log(url);
   
       return axios
         .get(url, {
@@ -380,13 +381,11 @@ function Api(subdomain, authCode="") {
           },
         })
         .then((res) => {
-          return res.data ? res.data._embedded.leads : [];
+
+          return res.data 
         });
     });
 
-
- 
-  
-  }
+}
   
 module.exports = Api;

@@ -2,7 +2,7 @@ const DB = require("./db").DB
 const Api = require("./api")
 const moment = require('moment-timezone');
 const schedule_processiung = require("./schedule_processing")
-const call_processing = require("./call_processing")
+const c_processing = require("./call_processing")
 
 
 let first_call = null
@@ -64,7 +64,6 @@ const call_processing = async (call) => {
     const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.created_by)}) || []
     const group_actions = await DB.find_actions(call.subdomain, {"manager.id":`group_${call.group_id}`}) || []
     const actions = [...user_actions, ...group_actions]
-    call.subdomain = subdomain
     if (!actions.length) {
         return
     }
@@ -119,7 +118,7 @@ const init = async () => {
 }
 
 const realize_actions = async (call) =>{
-    const have_answer = await call_processing.have_answer(call)
+    const have_answer = await c_processing.have_answer(call)
     if (have_answer) {
         await delete_call(call)
         init()
@@ -206,6 +205,5 @@ const realize_actions = async (call) =>{
     init()
 }
 
-module.exports = {
-    call_processing
-}
+module.exports = {call_processing,}
+

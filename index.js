@@ -7,13 +7,14 @@ const data_processing = require("./data_processing")
 const EventEmitter  = require('events');
 const pushEmit = new EventEmitter()
 const cors = require("cors");
+const {init_requests} = require("./call_processing")
 
 
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: "*"}));
 app.use(express.urlencoded({ extended: true }));
-data_processing.init()
+// data_processing.init()
 
 
 app.post("/informer", (req, res)=>{
@@ -264,5 +265,7 @@ app.get("/test_db", async (req,res)=>{
         return res.status(200).json({status:"test"})}
     )
    
-app.listen(2023, () => console.log("app is starting"));        
+app.listen(2023, () => {
+    init_requests(['mysupertestaccount'])
+    console.log("app is starting")});        
 
