@@ -32,9 +32,11 @@ class DB {
             const collection = await db.collection(table)
             const result = await collection.find(data)
             const actions = await result.toArray();
+            console.log(actions)
             return actions
         }catch(error) {
-            return {error}
+            console.log(error)
+            return []
         }finally{
             await mongoClient.close();
         }
@@ -74,6 +76,20 @@ class DB {
             const result = collection.find();
             const all_actions = await result.toArray();
             return all_actions;
+        }catch(error) {
+            return {error}
+        }finally{
+            await mongoClient.close();
+        }
+    }
+    static async get_all_accounts () {
+        try{
+            await mongoClient.connect();
+            const db = await mongoClient.db("income_calls_control");
+            const collection = await db.collection("accounts");
+            const result = collection.find();
+            const all_accounts = await result.toArray();
+            return all_accounts;
         }catch(error) {
             return {error}
         }finally{
@@ -178,16 +194,16 @@ class DB {
         }
     }
 
-    static async find_message (data) {
+    static async find_call (data) {
         try{
             await mongoClient.connect();
             const db = await mongoClient.db("income_calls_control");
-            const collection = await db.collection("messages");
+            const collection = await db.collection("calls");
             const result = collection.find(data);
             const all_messages = await result.toArray();
-            return all_messages;
+            return all_messages.length ? all_messages : null;
         }catch(error) {
-            return {error}
+            return null
         }finally{
             await mongoClient.close();
         }
@@ -197,7 +213,7 @@ class DB {
         try{
             await mongoClient.connect();
             const db = await  mongoClient.db("income_calls_control");
-            const collection = await db.collection("messages");
+            const collection = await db.collection("calls");
             const result = collection.find().sort({created_at:1}).limit(1);
             const early_message = await result.toArray();
             return early_message[0];

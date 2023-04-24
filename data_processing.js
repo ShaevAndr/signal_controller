@@ -2,12 +2,25 @@ const DB = require("./db").DB
 const Api = require("./api")
 const moment = require('moment-timezone');
 const schedule_processiung = require("./schedule_processing")
-const c_processing = require("./call_processing")
 
 
 let first_call = null
 let timer = null
 let users = {}
+
+const check_answer = async (call) => {
+    const api = new Api(call.subdomain)
+    const notes = await api.getNotes(call, {
+        filters:{
+            "filter[note_type]": "call_out",
+            "filter[updated_at][from]": call.created_at
+        }})
+    if (!notes) {
+        return false
+    }
+    console.log("check_answer ", notes._embedded.notes || "net otveta");
+    return notes._embedded.notes.length ?  true : false
+}
 
 const delete_call = (call) => {
     DB.delete_calls({"id":String(call.id), "subdomain":call.subdomain})
@@ -44,6 +57,7 @@ const add_call_to_db = async (actions, call) => {
     }
     call.responsible_id = lead.responsible_user_id
     call.group_id = lead.group_id
+    console.log(call)
 
     const result = await DB.add_call(call)
     .then((data)=>{
@@ -61,6 +75,7 @@ const add_call_to_db = async (actions, call) => {
 }
 
 const call_processing = async (call) => {
+    console.log(call.subdomain)
     const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.created_by)}) || []
     const group_actions = await DB.find_actions(call.subdomain, {"manager.id":`group_${call.group_id}`}) || []
     const actions = [...user_actions, ...group_actions]
@@ -118,7 +133,7 @@ const init = async () => {
 }
 
 const realize_actions = async (call) =>{
-    const have_answer = await c_processing.have_answer(call)
+    const have_answer = await check_answer(call)
     if (have_answer) {
         await delete_call(call)
         init()
@@ -205,5 +220,9 @@ const realize_actions = async (call) =>{
     init()
 }
 
-module.exports = {call_processing,}
+module.exports = {
+    call_processing, 
+    check_answer,
+    delete_call
+};
 

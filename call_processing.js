@@ -1,20 +1,11 @@
 const Api = require("./api")
 const d_processing = require("./data_processing")
+const DB = require("./db").DB
 
 // Переодичность запросов (сек)
 const DELAY = 30
 
-const check_answer = async (call) => {
-    const api = new Api(call.subdomain)
-    const notes = await api.getNotes(call, {
-        filters:{
-            "filter[note_type]": "call_out",
-            // "filter[updated_at][from]": call.created_at
-        }})
-    if (!notes) return false
-        console.log("check_answer ", notes._embedded.notes || "net otveta");
-    return notes._embedded.notes.length ?  true : false
-}
+
 
 let intervals = {}
 
@@ -28,18 +19,24 @@ const check_call = async (call, subdomain) => {
                 // "filter[updated_at][from]": call.created_at
             }
         })
-        console.log(notes._embedded);
+        const call_in_base = await DB.find_call({'entity_id':call.entity_id})
+        console.log("call in base : ", call_in_base)
+        // console.log(notes._embedded);
         for (let note of notes._embedded.notes) {
             if (note.created_at === call.created_at) {
-                if (note.params.call_status === 4 || note.params.call_status === 5) {return}
-                const have_answer = await check_answer(call)
-                if (!have_answer) {
-                    // const contact = await api.getContact(call.created_by)
-                    // const group_id = contact.group_id
-                    // call.group_id = group_id
-                    console.log("check_call", call.created_by);
-                    console.log(d_processing);
+                if (note.params.call_status === 4 || note.params.call_status === 5) {
+                    call_in_base && await d_processing.delete_call(call)
+                    return}
 
+                const have_answer = await d_processing.check_answer(call)
+                if (!have_answer && !call_in_base) {
+                    const responsible = await api.getDeal(call.entity_id)
+                        .then(data=>data.responsible_user_id)
+                    call.responsible_id = responsible
+                    const contact = await api.getContact(call.responsible_id)
+                    const group_id = contact.group_id
+                    call.group_id = group_id
+                    console.log(call);
                     // await d_processing.call_processing(call)
                 }
             }
@@ -66,29 +63,30 @@ const parse_calls = async (subdomain) => {
         return 
     }
     
-    console.log(events._embedded.events);
+    // console.log(events._embedded.events);
     const incoming_calls = events._embedded.events
     if (!incoming_calls.length){
         console.log("нет звонков");
         return
     }
-    for (const call of incoming_calls) {
-        await check_call(call, subdomain)
+    for (let i=incoming_calls.length-1; i>=0; i--) {
+        await check_call(incoming_calls[i], subdomain)
     }
     
 }
 
-function init_requests(subdomains){
-    for (let subdomain of subdomains) {
-        console.log(subdomain);
-        intervals[subdomain] = setTimeout(parse_calls, 5000, subdomain)
-    }
-    // console.log(intervals)
+async function init_requests(){
+    try{
+        let subdomains = await DB.get_all_accounts()
+        for (let subdomain of subdomains) {
+            intervals[subdomain.subDomain] = setTimeout(parse_calls, 1000, subdomain.subDomain)
+        }
+        // console.log(intervals)
+    } catch (err) {console.log(err)}
 }
 
 module.exports = {
     init_requests,
-    check_answer
 }
 
 // const call = await fetch("https://mysupertestaccount.amocrm.ru/api/v4/calls", {

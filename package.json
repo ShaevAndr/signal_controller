@@ -27,6 +27,7 @@
     "log4js": "^6.7.0",
     "moment-timezone": "^0.5.41",
     "mongodb": "^4.12.0",
+    "node-telegram-bot-api": "^0.61.0",
     "nodemon": "^2.0.20",
     "twig": "^1.15.4"
   }

@@ -372,7 +372,6 @@ function Api(subdomain, authCode="") {
         limit,
         ...filters,
       })}`;
-      console.log(url);
   
       return axios
         .get(url, {
@@ -382,8 +381,9 @@ function Api(subdomain, authCode="") {
         })
         .then((res) => {
 
-          return res.data 
-        });
+          return res.data ? res.data : null
+        })
+        .catch(()=>null);
     });
 
 }
