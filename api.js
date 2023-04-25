@@ -187,6 +187,17 @@ function Api(subdomain, authCode="") {
       .then((res) => res.data);
   });
   
+  this.getUser = authChecker((id) => {
+    return axios
+      .get(`${ROOT_PATH}/api/v4/users/${id}?${querystring.stringify({
+      })}`, {
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+        },
+      })
+      .then((res) => res.data);
+  });
+  
   this.updateContacts = authChecker((data) => {
     return axios.patch(`${ROOT_PATH}/api/v4/contacts`, [].concat(data), {
       headers: {

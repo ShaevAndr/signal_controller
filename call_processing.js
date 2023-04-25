@@ -19,26 +19,33 @@ const check_call = async (call, subdomain) => {
                 // "filter[updated_at][from]": call.created_at
             }
         })
-        const call_in_base = await DB.find_call({'entity_id':call.entity_id})
+        console.log("notes:", notes._embedded.notes)
+        const call_in_base = await DB.find_call({'entity_id':call.entity_id, 'subdomain':call.subdomain})
         console.log("call in base : ", call_in_base)
         // console.log(notes._embedded);
         for (let note of notes._embedded.notes) {
             if (note.created_at === call.created_at) {
                 if (note.params.call_status === 4 || note.params.call_status === 5) {
-                    call_in_base && await d_processing.delete_call(call)
-                    return}
+                    if (call_in_base) {
+                        await d_processing.delete_call(call)
+                        }
+                    return
+                }
 
                 const have_answer = await d_processing.check_answer(call)
-                if (!have_answer && !call_in_base) {
+                console.log("have answer", have_answer)
+                if (!have_answer) {
+                    console.log("havent answer and not in base");
                     const responsible = await api.getDeal(call.entity_id)
                         .then(data=>data.responsible_user_id)
                     call.responsible_id = responsible
-                    const contact = await api.getContact(call.responsible_id)
-                    const group_id = contact.group_id
+                    const contact = await api.getUser(responsible)
+                    const group_id = contact.rights.group_id
                     call.group_id = group_id
-                    console.log(call);
+                    // console.log(call);
                     // await d_processing.call_processing(call)
                 }
+                return
             }
         }
     } catch (error) {
@@ -72,7 +79,6 @@ const parse_calls = async (subdomain) => {
     for (let i=incoming_calls.length-1; i>=0; i--) {
         await check_call(incoming_calls[i], subdomain)
     }
-    
 }
 
 async function init_requests(){
