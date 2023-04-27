@@ -76,13 +76,15 @@ const add_call_to_db = async (actions, call) => {
 
 const call_processing = async (call) => {
     console.log(call.subdomain)
-    const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.created_by)}) || []
+    const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.responsible_id)}) || []
     const group_actions = await DB.find_actions(call.subdomain, {"manager.id":`group_${call.group_id}`}) || []
     const actions = [...user_actions, ...group_actions]
+    console.log(actions);
     if (!actions.length) {
         return
     }
     for (action of actions) {
+        console.log(action, call)
         const result = await add_call_to_db(action, call)
     }
     return

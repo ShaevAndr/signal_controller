@@ -19,7 +19,7 @@ const check_call = async (call, subdomain) => {
                 // "filter[updated_at][from]": call.created_at
             }
         })
-        console.log("notes:", notes._embedded.notes)
+        // console.log("notes:", notes._embedded.notes)
         const call_in_base = await DB.find_call({'entity_id':call.entity_id, 'subdomain':call.subdomain})
         console.log("call in base : ", call_in_base)
         // console.log(notes._embedded);
@@ -43,7 +43,7 @@ const check_call = async (call, subdomain) => {
                     const group_id = contact.rights.group_id
                     call.group_id = group_id
                     // console.log(call);
-                    // await d_processing.call_processing(call)
+                    await d_processing.call_processing(call)
                 }
                 return
             }
