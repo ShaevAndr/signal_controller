@@ -38,6 +38,7 @@ const delete_call = (call) => {
 }
 
 const add_call_to_db = async (actions, call) => {
+    const api = new Api(call.subdomain)
     const is_work_time = schedule_processiung.is_work_time(actions.schedule, call.created_at, actions.timezone)
     let second_to_work = 1
     if (!is_work_time) {
