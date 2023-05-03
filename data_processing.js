@@ -18,17 +18,19 @@ const check_answer = async (call) => {
     if (!notes) {
         return false
     }
-    console.log("check_answer ", notes._embedded.notes || "net otveta");
+    // console.log("check_answer ", notes._embedded.notes || "net otveta");
     return notes._embedded.notes.length ?  true : false
 }
 
 const delete_call = (call) => {
-    DB.delete_calls({"id":String(call.id), "subdomain":call.subdomain})
+    console.log("delete_call start")
+    DB.delete_calls({"entity_type":call.entity_type, "entity_id":call.entity_id, "subdomain":call.subdomain})
     .then(()=>{
+        console.log("delete call first message", first_call._id, call._id)
         if (!first_call) {
             return
         }
-        if (first_call.id === call.id) {
+        if (first_call.entity_type === call.entity_type && first_call.entity_id === call.entity_id) {
             clearTimeout(timer)
             first_call = null
             init()
@@ -38,12 +40,17 @@ const delete_call = (call) => {
 }
 
 const add_call_to_db = async (actions, call) => {
+    console.log("add_call_to_db start ", call.created_at, "created at")
     const api = new Api(call.subdomain)
     const is_work_time = schedule_processiung.is_work_time(actions.schedule, call.created_at, actions.timezone)
     let second_to_work = 1
+
+    console.log("is workTime: ", is_work_time)
     if (!is_work_time) {
         second_to_work = schedule_processiung.time_to_start_work(actions.schedule, call.created_at, actions.timezone)
     }
+    console.log("second to work: ", second_to_work)
+
     // if (!second_to_work) {
     //     return Promise.resolve()
     // }
@@ -57,16 +64,16 @@ const add_call_to_db = async (actions, call) => {
         call.company = lead._embedded.companies[0].id
     }
     call.responsible_id = lead.responsible_user_id
-    call.group_id = lead.group_id
-    console.log(call)
+    // call.group_id = lead.group_id
+    console.log("add call to db from add to base. Call responsible", call.responsible_id)
 
     const result = await DB.add_call(call)
     .then((data)=>{
         if (!first_call || call.action_time < first_call.action_time) {
             if (timer) {
                 clearTimeout(timer)
-                first_call = call
             }
+            first_call = call
             set_call_timer(call)
         }
         return data
@@ -76,16 +83,17 @@ const add_call_to_db = async (actions, call) => {
 }
 
 const call_processing = async (call) => {
-    console.log(call.subdomain)
+    console.log("call processing start")
     const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.responsible_id)}) || []
     const group_actions = await DB.find_actions(call.subdomain, {"manager.id":`group_${call.group_id}`}) || []
     const actions = [...user_actions, ...group_actions]
-    console.log(actions);
+    console.log("call pr. actions length", actions.length);
     if (!actions.length) {
+        console.log("call pr. нет условий");
         return
     }
-    for (action of actions) {
-        console.log(action, call)
+    for (let action of actions) {
+        console.log("call pr. loop for add_call_to_db", action._id)
         const result = await add_call_to_db(action, call)
     }
     return
@@ -112,15 +120,17 @@ const convert_task_date = (date_string, tz) => {
 }
 
 const set_call_timer = (call) => {
+    console.log("set call timer start")
     let delay = 0
     if (call.action_time > Date.now()+1000) {
         delay = call.action_time - Date.now()
     }
     timer = setTimeout(realize_actions, delay, call)
-    console.log(delay)
+    console.log("set call timer start delay", delay)
 }
 
 const init = async () => {
+    console.log("init start")
     let early_call = null
     try{
         early_call = await DB.get_early_call()
@@ -136,10 +146,11 @@ const init = async () => {
 }
 
 const realize_actions = async (call) =>{
+    console.log("realize_actions start")
     const have_answer = await check_answer(call)
     if (have_answer) {
         await delete_call(call)
-        init()
+        // init()
         return
     }
     const api = new Api(call.subdomain)
@@ -224,6 +235,7 @@ const realize_actions = async (call) =>{
 }
 
 module.exports = {
+    init,
     call_processing, 
     check_answer,
     delete_call

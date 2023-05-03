@@ -290,7 +290,8 @@ app.get("/PayService", async (req,res)=>{
     res.send('Read your IP...');
 })
    
-app.listen(2000, () => {
+app.listen(2000, async() => {
+    await data_processing.init()
     init_requests()
     console.log("app is starting")});        
 

@@ -32,7 +32,6 @@ class DB {
             const collection = await db.collection(table)
             const result = await collection.find(data)
             const actions = await result.toArray();
-            console.log(actions)
             return actions
         }catch(error) {
             console.log(error)
