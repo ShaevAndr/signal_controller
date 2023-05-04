@@ -48,9 +48,11 @@ const check_call = async (call, subdomain) => {
                 console.log("have answer", have_answer)
                 if (!have_answer) {
                     console.log("check call havent answer and not in base");
-                    const responsible = await api.getDeal(call.entity_id)
+                    const lead = await api.getDeal(call.entity_id, ["contacts"])
                         .then(data=>data.responsible_user_id)
-                    call.responsible_id = responsible
+                    call.responsible_id = lead.responsible_user_id
+                    call.company = lead._embedded.companies[0].id
+                    call.contact = lead._embedded.contacts[0].id
                     const contact = await api.getUser(responsible)
                     call.group_id = contact.rights.group_id || 0
                     // console.log(call);
@@ -91,6 +93,9 @@ const parse_calls = async (subdomain) => {
     }
     for (let i=incoming_calls.length-1; i>=0; i--) {
         console.log("parse calls перебор звонков")
+        if (incoming_calls[i].entity_type !== 'lead') {
+            continue
+        }
         await check_call(incoming_calls[i], subdomain)
     }
 }
