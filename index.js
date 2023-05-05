@@ -256,7 +256,7 @@ app.get("/notification", (req, res)=>{
         id:req.query.id , 
         res:res
       };
-    //   data_processing.add_client(client)
+      data_processing.add_client(client)
     
     
       req.on('close', () => {

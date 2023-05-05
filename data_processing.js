@@ -195,8 +195,6 @@ const realize_actions = async (call) =>{
                 }
             }).catch(err=>{console.log(err.response.data)})
 
-        // !!!!!!!!!!!!!!!!!!!!! контакт искать
-
             if(call.actions.tag_on_contact) {
                 const contact = await api.getContact(Number(call.contact_id))
                 if (contact._embedded.tags.length) {
@@ -209,8 +207,6 @@ const realize_actions = async (call) =>{
                     }
                 }).catch(err=>{console.log(err.response.data)})
             }
-
-        // !!!!!!!!!!!!!!!!!!!!! компанию искать
 
             if(call.actions.tag_on_company && call.company) {
                 const company = await api.getCompany(Number(call.company))
@@ -241,7 +237,12 @@ const realize_actions = async (call) =>{
     }
 }
 
+const add_client = (client) => {
+    users[client.id] = client.res
+}
+
 module.exports = {
+    add_client,
     init,
     call_processing, 
     check_answer,

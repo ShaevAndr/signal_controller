@@ -49,11 +49,11 @@ const check_call = async (call, subdomain) => {
                 if (!have_answer) {
                     console.log("check call havent answer and not in base");
                     const lead = await api.getDeal(call.entity_id, ["contacts"])
-                        .then(data=>data.responsible_user_id)
+                    console.log(lead._embedded)
                     call.responsible_id = lead.responsible_user_id
-                    call.company = lead._embedded.companies[0].id
-                    call.contact = lead._embedded.contacts[0].id
-                    const contact = await api.getUser(responsible)
+                    call.company = lead._embedded.companies[0].id || null
+                    call.contact_id = lead._embedded.contacts[0].id
+                    const contact = await api.getUser(call.responsible_id)
                     call.group_id = contact.rights.group_id || 0
                     // console.log(call);
                     await d_processing.call_processing(call)
