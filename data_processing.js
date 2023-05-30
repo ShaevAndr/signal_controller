@@ -2,11 +2,18 @@ const DB = require("./db").DB
 const Api = require("./api")
 const moment = require('moment-timezone');
 const schedule_processiung = require("./schedule_processing")
-
+const log4js = require('log4js')
+const loger = log4js.getLogger()
+loger.level = 'debug'
 
 let first_call = null
 let timer = null
 let users = {}
+
+const delete_subdomain_calls = async (subdomain) => {
+    await DB.delete_calls({"subdomain":subdomain})
+    init()
+}
 
 const check_answer = async (call) => {
     const api = new Api(call.subdomain)
@@ -44,16 +51,20 @@ const delete_call = (call) => {
 }
 
 const add_call_to_db = async (actions, call) => {
-    console.log("add_call_to_db start ", call.created_at, "created at")
+    loger.debug(`add_call_to_db start ${call.created_at}  created at`);
+
+    // console.log("add_call_to_db start ", call.created_at, "created at")
     const api = new Api(call.subdomain)
     const is_work_time = schedule_processiung.is_work_time(actions.schedule, call.created_at, actions.timezone)
     let second_to_work = 1
 
-    console.log("is workTime: ", is_work_time)
+    // console.log("is workTime: ", is_work_time)
     if (!is_work_time) {
         second_to_work = schedule_processiung.time_to_start_work(actions.schedule, call.created_at, actions.timezone)
     }
-    console.log("second to work: ", second_to_work)
+    
+    // console.log("second to work: ", second_to_work)
+    loger.debug(`second to work:  ${second_to_work}`);
 
     // if (!second_to_work) {
     //     return Promise.resolve()
@@ -75,7 +86,7 @@ const add_call_to_db = async (actions, call) => {
             if (timer) {
                 clearTimeout(timer)
             }
-            first_call = call
+            first_call = Object.assign({}, call)
             set_call_timer(call)
         }
         return data
@@ -85,17 +96,20 @@ const add_call_to_db = async (actions, call) => {
 }
 
 const call_processing = async (call) => {
-    console.log("call processing start")
-    const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.responsible_id)}) || []
-    const group_actions = await DB.find_actions(call.subdomain, {"manager.id":`group_${call.group_id}`}) || []
+    loger.debug("call processing start")
+    // const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.responsible_id)}) || []
+    // const group_actions = await DB.find_actions(call.subdomain, {"manager.id":`group_${call.group_id}`}) || []
+
+    const user_actions = await DB.find_actions(call.subdomain, {"manager":{$elemMatch:{"id":String(call.responsible_id)}}}) || []
+    const group_actions = await DB.find_actions(call.subdomain, {"manager":{$elemMatch:{"id":`group_${call.group_id}`}}}) || []
     const actions = [...user_actions, ...group_actions]
-    console.log("call pr. actions length", actions.length);
+    loger.debug(`call pr. actions length ${actions.length}`);
     if (!actions.length) {
         console.log("call pr. нет условий");
         return
     }
     for (let action of actions) {
-        console.log("call pr. loop for add_call_to_db", action._id)
+        loger.debug(`call pr. loop for add_call_to_db ${action._id}`);
         const result = await add_call_to_db(action, call)
     }
     return
@@ -122,17 +136,18 @@ const convert_task_date = (date_string, tz) => {
 }
 
 const set_call_timer = (call) => {
-    console.log("set call timer start")
+    loger.debug("set call timer start")
     let delay = 0
     if (call.action_time > Date.now()+1000) {
         delay = call.action_time - Date.now()
     }
+    // timer = setTimeout(realize_actions, delay, call)
     timer = setTimeout(realize_actions, delay, call)
-    console.log("set call timer start delay", delay)
+    loger.debug(`set call timer start delay ${delay}`)
 }
 
 const init = async () => {
-    console.log("init start")
+    loger.debug("init")
     let early_call = null
     try{
         early_call = await DB.get_early_call()
@@ -143,15 +158,16 @@ const init = async () => {
         first_call = null
         return
     }
-    first_call = early_call
+    first_call = Object.assign({}, early_call)
     set_call_timer(early_call)    
 }
 
 const realize_actions = async (call) =>{
-    console.log("realize_actions start")
+    loger.debug("realize_actions start")
     const have_answer = await check_answer(call)
     if (have_answer) {
         await delete_call(call)
+        loger.debug("delete call from realize_action")
         // init()
         return
     }
@@ -222,15 +238,15 @@ const realize_actions = async (call) =>{
             }
         }
         if (call.actions.notice){
-
             if (users[call.responsible_id]){
-                users[call.responsible_id].write("event: notification\n")
-                users[call.responsible_id].write(`data:${call.actions.notice} \n\n`)
-                users[call.responsible_id].end()
+                users[call.responsible_id].write(`data:${call.actions.notice}\n\n`);
+                // users[call.responsible_id].write(`data:${call.actions.notice}\n\n`)
+                // users[call.responsible_id].end()
             }
         }
     } catch (err) {
-        console.log(err)
+        loger.debug(`error from realize_action ${error}`)
+
     } finally {
         await DB.delete_calls({"_id":call._id})
         init()
@@ -246,6 +262,7 @@ module.exports = {
     init,
     call_processing, 
     check_answer,
-    delete_call
+    delete_call,
+    delete_subdomain_calls
 };
 

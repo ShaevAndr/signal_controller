@@ -1,9 +1,12 @@
 const Api = require("./api")
 const d_processing = require("./data_processing")
 const DB = require("./db").DB
+const log4js = require('log4js')
+const loger = log4js.getLogger()
+loger.level = "debug"
 
 // Переодичность запросов (сек)
-const DELAY = 30
+const DELAY = 60
 
 
 
@@ -12,7 +15,7 @@ let intervals = {}
 
 const check_call = async (call, subdomain) => {
     try{
-        console.log("check calls start")
+        loger.debug(`check call ${subdomain}`)
 
         const api = new Api(subdomain)
         call.subdomain = subdomain
@@ -31,7 +34,7 @@ const check_call = async (call, subdomain) => {
 
             if (note.created_at === call.created_at) {
                 if (note.params.call_status === 4 || note.params.call_status === 5) {
-                    console.log("check calls есть ответ")
+                    loger.debug(`check call have answer ${subdomain}`)
                     if (call_in_base) {
                         console.log("check calls удаление из базы")
                         await d_processing.delete_call(call)
@@ -40,21 +43,28 @@ const check_call = async (call, subdomain) => {
                 }
                 
                 if (call_in_base) {
-                    console.log("звонок есть в базе -> выход")
+                    loger.debug(`check call звонок есть в базе -> выход ${subdomain}`)
                     return
                 }
 
                 const have_answer = await d_processing.check_answer(call)
-                console.log("have answer", have_answer)
+                loger.debug(`check call check answer -> ${have_answer}`)
+                
                 if (!have_answer) {
-                    console.log("check call havent answer and not in base");
+                    loger.debug(`check call havent answer and not in base -> ${subdomain}`)
                     const lead = await api.getDeal(call.entity_id, ["contacts"])
+                    call.company = null
+                    call.group_id = 0
                     console.log(lead._embedded)
                     call.responsible_id = lead.responsible_user_id
-                    call.company = lead._embedded.companies[0].id || null
+                    if (lead._embedded.companies.length) {
+                        call.company = lead._embedded.companies[0].id || null
+                    }
                     call.contact_id = lead._embedded.contacts[0].id
                     const contact = await api.getUser(call.responsible_id)
-                    call.group_id = contact.rights.group_id || 0
+                    if (contact.rights.group_id) {
+                        call.group_id = contact.rights.group_id || 0
+                    }
                     // console.log(call);
                     await d_processing.call_processing(call)
                 }
@@ -62,7 +72,8 @@ const check_call = async (call, subdomain) => {
             }
         }
     } catch (error) {
-        console.log(error)
+        loger.debug(`check call error -> ${error}`)
+        
         return
     }
 
@@ -70,14 +81,14 @@ const check_call = async (call, subdomain) => {
 
 
 const parse_calls = async (subdomain) => {
-    console.log("parse calls start ")
+    console.log("parse calls start ", subdomain)
     
     const current_time = Math.round(Date.now()/1000)
     const api = new Api(subdomain)
     const events = await api.getEvents(
         {filters:
         {'filter[type]' : "incoming_call",
-        "filter[created_at][from]" : current_time-DELAY,
+        "filter[created_at][from]" : current_time-DELAY-10,
         "filter[created_at][to]" : current_time
     }}
     )
@@ -92,7 +103,7 @@ const parse_calls = async (subdomain) => {
         return
     }
     for (let i=incoming_calls.length-1; i>=0; i--) {
-        console.log("parse calls перебор звонков")
+        loger.debug(`parse calls перебор звонков -> ${subdomain}, входящий звонок тип сущности: ${incoming_calls[i].entity_type}`)
         if (incoming_calls[i].entity_type !== 'lead') {
             continue
         }
@@ -100,10 +111,15 @@ const parse_calls = async (subdomain) => {
     }
 }
 
-async function init_requests(){
+async function init_requests(subdomain=null){
+    if (subdomain) {
+        console.log("add intervals")
+        intervals[subdomain] = setInterval(parse_calls, DELAY*1000, subdomain)
+        return
+    }    
     try{
         console.log("start init requestst")
-        let subdomains = await DB.get_all_accounts()
+        let subdomains = await DB.get_all_accounts({"installed":true})
         for (let subdomain of subdomains) {
             intervals[subdomain.subDomain] = setInterval(parse_calls, DELAY*1000, subdomain.subDomain)
         }
@@ -112,36 +128,17 @@ async function init_requests(){
     } catch (err) {console.log(err)}
 }
 
-module.exports = {
-    init_requests,
+const delete_timer = (subdomain) => {
+    try{
+        console.log("delete_timer", subdomain)
+        clearInterval(intervals[subdomain])
+        d_processing.delete_subdomain_calls(subdomain)
+    } catch (err) {
+        console.log(err)
+    }
 }
 
-// const call = await fetch("https://mysupertestaccount.amocrm.ru/api/v4/calls", {
-//     method: "POST",
-//     body: JSON.stringify([{
-//     "duration": 10,
-//     "source": "example_integration",
-//     "phone": "123123",
-//     "direction": "inbound",
-//     "call_result": "Успешный разговор",
-//     "call_status": 4,
-//     "call_responsible": "Шаев Андрей",
-//     "responsible_user_id": 8736109
-//     }])
-// }).then(data=>data.json())
-// const call = await fetch("https://mysupertestaccount.amocrm.ru//api/v4/leads/10764967/notes", {
-//     method: "POST",
-//     body: JSON.stringify([
-//         {
-//             "note_type": "call_in",
-//             "params": {
-//                 "uniq": "8f52d38a-5fb3-406d-93a3-a4832dc28f8b",
-//                 "duration": 60,
-//                 "call_status": 4,
-
-//                 "source": "onlinePBX",
-//                 "link": "https://example.com",
-//                 "phone": "+79999999999"
-//             }
-//         }])
-// }).then(data=>data.json())
+module.exports = {
+    init_requests,
+    delete_timer
+}

@@ -4,16 +4,21 @@ const express = require('express');
 const DB = require("./db").DB;
 const fs = require("fs");
 const data_processing = require("./data_processing")
-const EventEmitter  = require('events');
-const pushEmit = new EventEmitter()
+// const EventEmitter  = require('events');
+// const pushEmit = new EventEmitter()
 const cors = require("cors");
-const {init_requests} = require("./call_processing")
+const {init_requests, delete_timer} = require("./call_processing")
 const requestIp = require('request-ip');
 const TelegramBot = require('node-telegram-bot-api');
 const { default: axios } = require("axios");
+const Twig = require('twig');
 
 
 const app = express();
+app.set("twig options", {
+    allowAsync: true, // Allow asynchronous compiling
+    strict_variables: false
+});
 app.use(express.json());
 app.use(cors({ origin: "*"}));
 app.use(express.urlencoded({ extended: true }));
@@ -22,6 +27,24 @@ app.use(requestIp.mw());
 const BOT_TOKEN = "6174001833:AAHqRD3W-aZ_XrZvXh0ABjyBr8sW0nArQWg"
 
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
+
+app.get("/element_test", (req, res)=>{
+    console.log("element_test")
+    res.render('select_users.twig', {
+        selected: [
+            {id:1, option: "Andrew"},
+            {id:2, option: "Maksim"},
+            {id:3, option: "Vika"}
+        ],                
+        items: [
+            {id:1, option: "Andrew"},
+            {id:2, option: "Maksim"},
+            {id:3, option: "Vika"},
+            {id:4, option: "Sasha"},
+            {id:5, option: "Nik"}
+        ]
+    })
+})
 
 
 app.post("/informer", (req, res)=>{
@@ -75,59 +98,60 @@ app.post("/get_actions", (req, res) => {
     .catch(()=>res.sendStatus(400))
 }) 
 
-app.post("/new_message", async (req, res)=>{
-    console.log("new_message")
+// app.post("/new_message", async (req, res)=>{
+//     console.log("new_message")
 
-    try{        
-        const {chat_id, talk_id, created_at, contact_id, updated_at} = req.body.message.add[0],
-        {subdomain, id} = req.body.account;
+//     try{        
+//         const {chat_id, talk_id, created_at, contact_id, updated_at} = req.body.message.add[0],
+//         {subdomain, id} = req.body.account;
 
-        const searchingUser = await DB.get_account_by_subdomain(subdomain)
-        const isSubscribe = searchingUser.finishUsingDate - Date.now();
-        // if (isSubscribe<0) {
-        //         return res.sendStatus(200)
-        // }
-        const api = new Api(subdomain)
-        let message = {chat_id,
-            talk_id,
-            created_at,
-            contact_id,
-            subdomain,
-            account_id: id}
-        const talk = await api.getTalk(talk_id)
-        const lead_id = talk._embedded["leads"][0]["id"]
-        const lead = await api.getDeal(lead_id)
-        if (lead._embedded.companies.length) {
-            message.company = lead._embedded.companies[0].id
-        }
-        message.lead_id = lead_id
-        message.updated_at = talk.updated_at
-        message.is_read = talk.is_read
-        message.responsible_id = lead.responsible_user_id
-        message.group_id = lead.group_id
-        await data_processing.message_processing(message)
-        res.sendStatus(200)
-    } catch {
-        (err) => {
-            console.log(err)
-            res.sendStatus(200)
-        }
-        // logger.error(`Новое сообщение не обработанно. Talk_id: ${talk_id}`)
-    }
-})
-app.post("/change_talk", async (req, res)=>{    
-    console.log("change_talk")
-    if (req.body.talk.update[0].is_read === "1"){
-        const talk_id = req.body.talk.update[0].talk_id
-        const subdomain = req.body.account.subdomain
-        data_processing.delete_talk(talk_id, subdomain)
-    }
-    res.sendStatus(200)
-})
+//         const searchingUser = await DB.get_account_by_subdomain(subdomain)
+//         const isSubscribe = searchingUser.finishUsingDate - Date.now();
+//         // if (isSubscribe<0) {
+//         //         return res.sendStatus(200)
+//         // }
+//         const api = new Api(subdomain)
+//         let message = {chat_id,
+//             talk_id,
+//             created_at,
+//             contact_id,
+//             subdomain,
+//             account_id: id}
+//         const talk = await api.getTalk(talk_id)
+//         const lead_id = talk._embedded["leads"][0]["id"]
+//         const lead = await api.getDeal(lead_id)
+//         if (lead._embedded.companies.length) {
+//             message.company = lead._embedded.companies[0].id
+//         }
+//         message.lead_id = lead_id
+//         message.updated_at = talk.updated_at
+//         message.is_read = talk.is_read
+//         message.responsible_id = lead.responsible_user_id
+//         message.group_id = lead.group_id
+//         await data_processing.message_processing(message)
+//         res.sendStatus(200)
+//     } catch {
+//         (err) => {
+//             console.log(err)
+//             res.sendStatus(200)
+//         }
+//         // logger.error(`Новое сообщение не обработанно. Talk_id: ${talk_id}`)
+//     }
+// })
+// app.post("/change_talk", async (req, res)=>{    
+//     console.log("change_talk")
+//     if (req.body.talk.update[0].is_read === "1"){
+//         const talk_id = req.body.talk.update[0].talk_id
+//         const subdomain = req.body.account.subdomain
+//         data_processing.delete_talk(talk_id, subdomain)
+//     }
+//     res.sendStatus(200)
+// })
 
 app.get('/login', async (req, res) => {
     try {
-        let { client_id: integrationId, referer: subDomain, code: authCode } = req.query;
+        let { client_id: clientId, referer: subDomain, code: authCode } = req.query;
+        console.log()
         subDomain = subDomain.split('.', 1)[0]
         const logger = getUserLogger(subDomain);
         logger.debug("Got request for widget installation");
@@ -135,12 +159,10 @@ app.get('/login', async (req, res) => {
         await api.getAccessToken()
         .then(() => logger.debug(`Авторизация при установке виджета для ${subDomain} прошла успешно`))
         .catch((err) => logger.debug("Ошибка авторизации при установке виджета ", subDomain, err.data));
-        console.log("before")
         const subdomain_in_base = await DB.get_account_by_subdomain(subDomain)
-        console.log(subdomain_in_base)
         if (!subdomain_in_base) {
-            // const account = await api.getAccountData();
-            const accountId = 1;
+            const account = await api.getAccountData();
+            const accountId = account.id;
             logger.debug(`получен id аккаунта:${accountId}`)
             const accountInfo = {
                 subDomain: subDomain,
@@ -154,15 +176,18 @@ app.get('/login', async (req, res) => {
                 }
                 await DB.add_account(accountInfo)
                 .then(() => logger.debug("Данные о пользователе были добавлены в базу данных виджета"))
+                .then(() => {init_requests(subDomain)})
                 .catch((err) => logger.debug("Произошла ошибка добавления данных в БД ", err));
             } else {
                 await DB.update_account_by_subdomain(subDomain, {
                     "installed": true,
                     "authCode": authCode
                 })
-                .then(() => {logger.debug("Данные о пользователе были обновлены в базе данных виджета")
-                return res.status(200)})
-                
+                .then(() => {logger.debug("Данные о пользователе были обновлены в базе данных виджета")})
+                .then(() => {
+                    init_requests(subDomain)
+                    return res.status(200)
+                })
                 .catch((err) => logger.debug("Произошла ошибка обновления данных в БД ", err));
             }
             
@@ -179,12 +204,16 @@ app.get('/login', async (req, res) => {
 
 
 app.get('/delete', async (req, res) => {
+    console.log('delete acccount')
+    const accountId = Number(req.query.account_id);
+    const  clientAccountData  = await DB.find_account({"accountId":accountId});
+    const {subDomain:subDomain} = clientAccountData;
+    console.log(accountId)
     try {
-        const accountId = Number(req.query.account_id);
-        const  clientAccountData  = await DB.find_account({accountId});
-        const subDomain = clientAccountData.subDomain;
         const AMO_TOKEN_PATH = `./authclients/${subDomain}_amo_token.json`;
         const logger = getUserLogger(subDomain);
+        console.log("удаление виджета")
+        console.log(subDomain)
         
         fs.unlinkSync(AMO_TOKEN_PATH);
         
@@ -197,6 +226,10 @@ app.get('/delete', async (req, res) => {
         logger.debug("Виджет был удалён из аккаунта");
     } catch(e) {
         res.status(400).json({ message: "Login error.", body: e })
+    } finally {
+        console.log("удаление таймоута субдомена", subDomain)
+
+        delete_timer(subDomain)
     }
     // await makeRedirect(`${config.WIDGET_CONTROLLER_URL}/del`, { ...req.query })
     res.status(200);
@@ -242,15 +275,16 @@ app.get("/notification", (req, res)=>{
     const headers = {
         'Content-Type': 'text/event-stream',
         'Connection': 'keep-alive',
-        'Cache-Control': 'no-cache'
+        'Cache-Control': 'no-cache',
+        "Access-Control-Allow-Origin": "*"
       };
     res.writeHead(200, headers);
     
-    const data = `data: data\n\n`;
+    const data = `data: "test"\n\n`;
     
-      res.write(data);
+      res.write("\n\n");
 
-      setInterval(()=>{res.write(data);}, 30000)
+      setInterval(()=>{res.write("\n\n");}, 30000)
     
       const client = {
         id:req.query.id , 

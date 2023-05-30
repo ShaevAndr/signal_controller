@@ -12,7 +12,7 @@ axiosRetry(axios, { retries: 3, retryDelay: axiosRetry.exponentialDelay });
 const LIMIT = 200;
 
 function Api(subdomain, authCode="") {
-  this.subDomain = "mysupertestaccount";
+  this.subDomain = subdomain;
   const logger = getUserLogger(this.subDomain);
   let access_token = null;
   let refresh_token = null;
@@ -46,7 +46,8 @@ function Api(subdomain, authCode="") {
         client_id: config.CLIENT_ID,
         client_secret: config.CLIENT_SECRET,
         grant_type: "authorization_code",
-        code: config.SECRET_KEY,
+        code: authCode,
+        // code: config.SECRET_KEY,
         redirect_uri: config.REDIRECT_URI,
         responseType: 'json'
       })

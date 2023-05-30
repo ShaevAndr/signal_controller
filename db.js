@@ -81,12 +81,12 @@ class DB {
             await mongoClient.close();
         }
     }
-    static async get_all_accounts () {
+    static async get_all_accounts (data={}) {
         try{
             await mongoClient.connect();
             const db = await mongoClient.db("income_calls_control");
             const collection = await db.collection("accounts");
-            const result = collection.find();
+            const result = collection.find(data);
             const all_accounts = await result.toArray();
             return all_accounts;
         }catch(error) {
@@ -126,7 +126,7 @@ class DB {
             await mongoClient.connect();
             const db = await mongoClient.db("income_calls_control");
             const collection = await db.collection("accounts")
-            const result = await collection.findOne({subDomain:subDomain})
+            const result = await collection.findOne({"subDomain":subDomain})
             return result
         }catch(error) {
             return null
