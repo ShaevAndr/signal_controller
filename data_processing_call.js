@@ -2,13 +2,16 @@ const DB = require("./db").DB
 const Api = require("./api")
 const moment = require('moment-timezone');
 const schedule_processiung = require("./schedule_processing")
+const {users} = require('./client_connection_collection')
+
 const log4js = require('log4js')
 const loger = log4js.getLogger()
 loger.level = 'debug'
 
+
 let first_call = null
 let timer = null
-let users = {}
+
 
 const delete_subdomain_calls = async (subdomain) => {
     await DB.delete_calls({"subdomain":subdomain})
@@ -100,8 +103,8 @@ const call_processing = async (call) => {
     // const user_actions = await DB.find_actions(call.subdomain, {"manager.id":String(call.responsible_id)}) || []
     // const group_actions = await DB.find_actions(call.subdomain, {"manager.id":`group_${call.group_id}`}) || []
 
-    const user_actions = await DB.find_actions(call.subdomain, {"manager":{$elemMatch:{"id":String(call.responsible_id)}}}) || []
-    const group_actions = await DB.find_actions(call.subdomain, {"manager":{$elemMatch:{"id":`group_${call.group_id}`}}}) || []
+    const user_actions = await DB.find_actions(call.subdomain, {"manager":{$elemMatch:{"id":String(call.responsible_id)}}, "entity":'call'}) || []
+    const group_actions = await DB.find_actions(call.subdomain, {"manager":{$elemMatch:{"id":`group_${call.group_id}`}}, "entity":'call'}) || []
     const actions = [...user_actions, ...group_actions]
     loger.debug(`call pr. actions length ${actions.length}`);
     if (!actions.length) {
@@ -239,7 +242,7 @@ const realize_actions = async (call) =>{
         }
         if (call.actions.notice){
             if (users[call.responsible_id]){
-                users[call.responsible_id].write(`data:${call.actions.notice}\n\n`);
+                users[call.responsible_id].write(`event: notice_call\ndata: ${call.actions.notice}\n\n`);
                 // users[call.responsible_id].write(`data:${call.actions.notice}\n\n`)
                 // users[call.responsible_id].end()
             }
@@ -253,12 +256,8 @@ const realize_actions = async (call) =>{
     }
 }
 
-const add_client = (client) => {
-    users[client.id] = client.res
-}
 
 module.exports = {
-    add_client,
     init,
     call_processing, 
     check_answer,

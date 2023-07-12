@@ -1,17 +1,18 @@
-const {mainLogger, getUserLogger } = require("./logger");
-const Api = require("./api");
 const express = require('express');
-const DB = require("./db").DB;
-const fs = require("fs");
-const data_processing = require("./data_processing")
-// const EventEmitter  = require('events');
-// const pushEmit = new EventEmitter()
 const cors = require("cors");
+const fs = require("fs");
+const { default: axios } = require("axios");
+const {mainLogger, getUserLogger } = require("./logger");
+const Twig = require('twig');
+const TelegramBot = require('node-telegram-bot-api');
+
+const sse_clients = require('./client_connection_collection')
+const DB = require("./db").DB;
+const Api = require("./api");
+const data_processing_message = require("./data_processing_message")
+const data_processing_call = require("./data_processing_call")
 const {init_requests, delete_timer} = require("./call_processing")
 const requestIp = require('request-ip');
-const TelegramBot = require('node-telegram-bot-api');
-const { default: axios } = require("axios");
-const Twig = require('twig');
 
 
 const app = express();
@@ -23,9 +24,9 @@ app.use(express.json());
 app.use(cors({ origin: "*"}));
 app.use(express.urlencoded({ extended: true }));
 app.use(requestIp.mw());
-// data_processing.init()
 const BOT_TOKEN = "6174001833:AAHqRD3W-aZ_XrZvXh0ABjyBr8sW0nArQWg"
 
+let client_sse;
 const bot = new TelegramBot(BOT_TOKEN, { polling: false });
 
 app.get("/element_test", (req, res)=>{
@@ -60,7 +61,7 @@ app.post("/informer", (req, res)=>{
 // удаляет действие
 app.delete('/data_change', (req, res) => {
     const {subdomain, changes} = req.body
-    DB.delete_action(subdomain, changes)
+    data_processing_message.delete_condition(subdomain, changes)
     .then(()=>res.json({send:"ok"}))
     .catch(()=>res.sendStatus(400))
 })
@@ -98,55 +99,57 @@ app.post("/get_actions", (req, res) => {
     .catch(()=>res.sendStatus(400))
 }) 
 
-// app.post("/new_message", async (req, res)=>{
-//     console.log("new_message")
-
-//     try{        
-//         const {chat_id, talk_id, created_at, contact_id, updated_at} = req.body.message.add[0],
-//         {subdomain, id} = req.body.account;
-
-//         const searchingUser = await DB.get_account_by_subdomain(subdomain)
-//         const isSubscribe = searchingUser.finishUsingDate - Date.now();
-//         // if (isSubscribe<0) {
-//         //         return res.sendStatus(200)
-//         // }
-//         const api = new Api(subdomain)
-//         let message = {chat_id,
-//             talk_id,
-//             created_at,
-//             contact_id,
-//             subdomain,
-//             account_id: id}
-//         const talk = await api.getTalk(talk_id)
-//         const lead_id = talk._embedded["leads"][0]["id"]
-//         const lead = await api.getDeal(lead_id)
-//         if (lead._embedded.companies.length) {
-//             message.company = lead._embedded.companies[0].id
-//         }
-//         message.lead_id = lead_id
-//         message.updated_at = talk.updated_at
-//         message.is_read = talk.is_read
-//         message.responsible_id = lead.responsible_user_id
-//         message.group_id = lead.group_id
-//         await data_processing.message_processing(message)
-//         res.sendStatus(200)
-//     } catch {
-//         (err) => {
-//             console.log(err)
-//             res.sendStatus(200)
-//         }
-//         // logger.error(`Новое сообщение не обработанно. Talk_id: ${talk_id}`)
-//     }
-// })
-// app.post("/change_talk", async (req, res)=>{    
-//     console.log("change_talk")
-//     if (req.body.talk.update[0].is_read === "1"){
-//         const talk_id = req.body.talk.update[0].talk_id
-//         const subdomain = req.body.account.subdomain
-//         data_processing.delete_talk(talk_id, subdomain)
-//     }
-//     res.sendStatus(200)
-// })
+app.post("/new_message", async (req, res)=>{
+    console.log("new_message");
+    const logger = getUserLogger("Messages");
+    try{        
+        const {chat_id, talk_id, created_at, contact_id, updated_at} = req.body.message.add[0],
+        {subdomain, id} = req.body.account;
+        
+        const searchingUser = await DB.get_account_by_subdomain(subdomain)
+        const isSubscribe = searchingUser.finishUsingDate - Date.now();
+        // if (isSubscribe<0) {
+            //         return res.sendStatus(200)
+            // }
+        const api = new Api(subdomain)
+        let message = {chat_id,
+            talk_id,
+            created_at,
+            contact_id,
+            subdomain,
+            account_id: id}
+            const talk = await api.getTalk(talk_id)
+            const lead_id = talk.entity_id
+            const lead = await api.getDeal(lead_id);
+        logger.debug(`Сообщение. Субдомен:${subdomain}, created_at: ${created_at}`)
+        if (lead._embedded.companies.length) {
+            message.company = lead._embedded.companies[0].id
+        }
+        message.lead_id = lead_id
+        message.updated_at = talk.updated_at
+        message.is_read = talk.is_read
+        message.responsible_id = lead.responsible_user_id
+        message.group_id = lead.group_id
+        await data_processing_message.message_processing(message)
+        res.sendStatus(200)
+    } catch {
+        (err) => {
+            const logger = getUserLogger("Errors");
+            logger.debug("Ошибка при получении сообщения", err)
+            res.sendStatus(200)
+        }
+        // logger.error(`Новое сообщение не обработанно. Talk_id: ${talk_id}`)
+    }
+})
+app.post("/change_talk", async (req, res)=>{    
+    console.log("change_talk")
+    if (req.body.talk.update[0].is_read === "1"){
+        const talk_id = req.body.talk.update[0].talk_id
+        const subdomain = req.body.account.subdomain
+        data_processing_message.delete_talk(talk_id, subdomain)
+    }
+    res.sendStatus(200)
+})
 
 app.get('/login', async (req, res) => {
     try {
@@ -230,6 +233,7 @@ app.get('/delete', async (req, res) => {
         console.log("удаление таймоута субдомена", subDomain)
 
         delete_timer(subDomain)
+        data_processing_call.delete_subdomain_calls(subDomain)
     }
     // await makeRedirect(`${config.WIDGET_CONTROLLER_URL}/del`, { ...req.query })
     res.status(200);
@@ -279,19 +283,14 @@ app.get("/notification", (req, res)=>{
         "Access-Control-Allow-Origin": "*"
       };
     res.writeHead(200, headers);
-    
-    const data = `data: "test"\n\n`;
-    
-      res.write("\n\n");
 
-      setInterval(()=>{res.write("\n\n");}, 30000)
-    
       const client = {
         id:req.query.id , 
         res:res
       };
-      data_processing.add_client(client)
-    
+    //   data_processing.add_client(client)
+    sse_clients.add_client(client)
+    console.log('sse')
     
       req.on('close', () => {
         return;
@@ -323,9 +322,31 @@ app.get("/PayService", async (req,res)=>{
 
     res.send('Read your IP...');
 })
+
+app.get('/sse_test', async (req, res) => {
+    const headers = {
+        'Content-Type': 'text/event-stream',
+        'Connection': 'keep-alive',
+        'Cache-Control': 'no-cache',
+        "Access-Control-Allow-Origin": "*"
+      };
+    res.writeHead(200, headers);
+
+    client = res
+})
+
+app.get('/sse_test_client', (req, res)=>{
+    console.log("sse test")
+    client.write("event: testing\ndata: test\n\n")
+    res.sendStatus(200)
+})
+
+
    
 app.listen(2000, async() => {
-    await data_processing.init()
-    init_requests()
+    
+    await data_processing_message.init()
+    await data_processing_call.init()
+    await init_requests()
     console.log("app is starting")});        
 
